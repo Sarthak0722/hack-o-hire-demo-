@@ -15,6 +15,40 @@ export const DashboardLayout: React.FC = () => {
   const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>('1h');
   const [selectedEnvironment, setSelectedEnvironment] = useState<string>('production');
+  const [services, setServices] = useState([
+    {
+      name: 'Authentication Services',
+      successRate: 95.9,
+      responseTime: 149,
+      activeUsers: 73,
+      riskScore: 2.5,
+      anomalies: 7
+    },
+    {
+      name: 'Account Services',
+      successRate: 97.5,
+      responseTime: 149,
+      activeUsers: 81,
+      riskScore: 1.5,
+      anomalies: 2
+    },
+    {
+      name: 'Payment Services',
+      successRate: 98.8,
+      responseTime: 446,
+      activeUsers: 86,
+      riskScore: 0.7,
+      anomalies: 1
+    },
+    {
+      name: 'Risk & Compliance',
+      successRate: 98.9,
+      responseTime: 491,
+      activeUsers: 89,
+      riskScore: 0.7,
+      anomalies: 4
+    }
+  ]);
 
   useEffect(() => {
     const generateInitialData = () => {
@@ -52,6 +86,20 @@ export const DashboardLayout: React.FC = () => {
 
     return () => clearInterval(interval);
   }, [selectedEnvironment]);
+
+  useEffect(() => {
+    // Keep the services data persistent
+    const interval = setInterval(() => {
+      setServices(prevServices => prevServices.map(service => ({
+        ...service,
+        successRate: Math.max(service.successRate + (Math.random() - 0.5) * 0.2, 0),
+        responseTime: Math.max(service.responseTime + (Math.random() - 0.5) * 10, 0),
+        activeUsers: Math.max(Math.round(service.activeUsers + (Math.random() - 0.5) * 2), 1)
+      })));
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
 
   const getServiceRiskScore = (serviceCategory: string) => {
     if (!metrics?.metrics_by_category[serviceCategory]) return 0;
@@ -115,40 +163,36 @@ export const DashboardLayout: React.FC = () => {
                  'Service Overview'}
               </h1>
               {(selectedService || selectedEndpoint) && (
-                <nav className="flex mt-2" aria-label="Breadcrumb">
-                  <ol className="flex items-center space-x-4">
-                    <li>
+                <div className="flex items-center space-x-2 mt-2">
+                  <button
+                    onClick={() => {
+                      setSelectedService(null);
+                      setSelectedEndpoint(null);
+                    }}
+                    className="px-3 py-1 bg-white border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium transition-colors duration-200"
+                  >
+                    Dashboard
+                  </button>
+                  <span className="text-gray-400">/</span>
+                  {selectedService && (
+                    <>
                       <button
-                        onClick={() => {
-                          setSelectedEndpoint(null);
-                          setSelectedService(null);
-                        }}
-                        className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
+                        onClick={() => setSelectedEndpoint(null)}
+                        className="px-3 py-1 bg-white border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium transition-colors duration-200"
                       >
-                        Dashboard
+                        {selectedService}
                       </button>
-                    </li>
-                    {selectedService && (
-                      <li className="flex items-center">
-                        <span className="mx-2 text-gray-400">/</span>
-                        <button
-                          onClick={() => setSelectedEndpoint(null)}
-                          className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
-                        >
-                          {selectedService}
-                        </button>
-                      </li>
-                    )}
-                    {selectedEndpoint && (
-                      <li className="flex items-center">
-                        <span className="mx-2 text-gray-400">/</span>
-                        <span className="text-sm font-medium text-gray-500">
-                          {selectedEndpoint}
-                        </span>
-                      </li>
-                    )}
-                  </ol>
-                </nav>
+                      {selectedEndpoint && (
+                        <>
+                          <span className="text-gray-400">/</span>
+                          <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-md">
+                            {selectedEndpoint}
+                          </span>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
             </div>
 
@@ -156,22 +200,21 @@ export const DashboardLayout: React.FC = () => {
               <select
                 value={selectedEnvironment}
                 onChange={(e) => setSelectedEnvironment(e.target.value)}
-                className="rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="production">Production</option>
                 <option value="staging">Staging</option>
-                <option value="dr">DR</option>
+                <option value="development">Development</option>
               </select>
-
               <select
                 value={selectedTimeRange}
                 onChange={(e) => setSelectedTimeRange(e.target.value)}
-                className="rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="15m">Last 15 minutes</option>
                 <option value="1h">Last hour</option>
-                <option value="6h">Last 6 hours</option>
                 <option value="24h">Last 24 hours</option>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
               </select>
             </div>
           </div>
