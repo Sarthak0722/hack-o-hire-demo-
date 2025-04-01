@@ -12,12 +12,30 @@ import {
   AreaChart,
   Area
 } from 'recharts';
+import { format } from 'date-fns';
 
 interface EndpointDetailProps {
   logs: APILog[];
   endpoint: string;
   serviceCategory: string;
   onBack: () => void;
+}
+
+interface ThresholdMetrics {
+  responseTime: {
+    p95: number;
+    p99: number;
+    warning: number;
+    critical: number;
+  };
+  errorRate: {
+    warning: number;
+    critical: number;
+  };
+  trafficVolume: {
+    low: number;
+    high: number;
+  };
 }
 
 export const EndpointDetail: React.FC<EndpointDetailProps> = ({
@@ -34,7 +52,8 @@ export const EndpointDetail: React.FC<EndpointDetailProps> = ({
     const timeSeriesData = endpointLogs.map(log => ({
       timestamp: log.timestamp,
       response_time: log.response_time_ms,
-      status: log.status
+      status: log.status,
+      status_code: log.status_code
     }));
 
     const total = endpointLogs.length;
@@ -60,6 +79,81 @@ export const EndpointDetail: React.FC<EndpointDetailProps> = ({
     };
   }, [logs, endpoint, serviceCategory]);
 
+  // Calculate dynamic thresholds based on historical data
+  const thresholds = useMemo((): ThresholdMetrics => {
+    const responseTimes = endpointData.timeSeriesData.map(log => log.response_time);
+    const p95Index = Math.floor(responseTimes.length * 0.95);
+    const p99Index = Math.floor(responseTimes.length * 0.99);
+    
+    // Group logs by 5-minute intervals for traffic analysis
+    const timeIntervals = endpointData.timeSeriesData.reduce((acc, log) => {
+      const timeKey = new Date(log.timestamp).setMinutes(0, 0, 0);
+      acc[timeKey] = (acc[timeKey] || 0) + 1;
+      return acc;
+    }, {} as Record<number, number>);
+    
+    const trafficCounts = Object.values(timeIntervals);
+    const avgTraffic = trafficCounts.reduce((a, b) => a + b, 0) / trafficCounts.length;
+    
+    return {
+      responseTime: {
+        p95: responseTimes[p95Index] || 0,
+        p99: responseTimes[p99Index] || 0,
+        warning: responseTimes[p95Index] * 1.2 || 200, // 20% above p95
+        critical: responseTimes[p99Index] * 1.2 || 300, // 20% above p99
+      },
+      errorRate: {
+        warning: 5, // 5% error rate warning
+        critical: 10, // 10% error rate critical
+      },
+      trafficVolume: {
+        low: Math.max(avgTraffic * 0.5, 1), // 50% below average
+        high: avgTraffic * 1.5, // 50% above average
+      },
+    };
+  }, [endpointData.timeSeriesData]);
+
+  // Prepare time series data
+  const timeSeriesData = useMemo(() => {
+    const dataPoints = endpointData.timeSeriesData.map(log => ({
+      timestamp: new Date(log.timestamp),
+      responseTime: log.response_time,
+      isError: log.status === 'error',
+      is4xx: log.status_code >= 400 && log.status_code < 500,
+      is5xx: log.status_code >= 500,
+    }));
+
+    // Group by minute for the graphs
+    const groupedData = dataPoints.reduce((acc, point) => {
+      const timeKey = point.timestamp.setSeconds(0, 0);
+      if (!acc[timeKey]) {
+        acc[timeKey] = {
+          timestamp: point.timestamp,
+          responseTime: [],
+          errorCount: 0,
+          error4xx: 0,
+          error5xx: 0,
+          totalRequests: 0,
+        };
+      }
+      acc[timeKey].responseTime.push(point.responseTime);
+      acc[timeKey].errorCount += point.isError ? 1 : 0;
+      acc[timeKey].error4xx += point.is4xx ? 1 : 0;
+      acc[timeKey].error5xx += point.is5xx ? 1 : 0;
+      acc[timeKey].totalRequests += 1;
+      return acc;
+    }, {} as Record<number, any>);
+
+    return Object.values(groupedData).map(group => ({
+      time: format(group.timestamp, 'HH:mm:ss'),
+      avgResponseTime: group.responseTime.reduce((a: number, b: number) => a + b, 0) / group.responseTime.length,
+      errorRate: (group.errorCount / group.totalRequests) * 100,
+      error4xxRate: (group.error4xx / group.totalRequests) * 100,
+      error5xxRate: (group.error5xx / group.totalRequests) * 100,
+      requestCount: group.totalRequests,
+    }));
+  }, [endpointData.timeSeriesData]);
+
   return (
     <div className="space-y-6">
       <button
@@ -77,7 +171,7 @@ export const EndpointDetail: React.FC<EndpointDetailProps> = ({
           <h2 className="text-2xl font-semibold text-gray-800">{endpoint}</h2>
         </div>
 
-        <div className="grid grid-cols-4 gap-6">
+        <div className="grid grid-cols-4 gap-6 mb-8">
           <div className="p-4 bg-gray-50 rounded-lg">
             <h3 className="text-sm font-medium text-gray-500">Success Rate</h3>
             <p className="mt-2 text-3xl font-semibold text-gray-900">
@@ -93,7 +187,7 @@ export const EndpointDetail: React.FC<EndpointDetailProps> = ({
           <div className="p-4 bg-gray-50 rounded-lg">
             <h3 className="text-sm font-medium text-gray-500">P95 Response Time</h3>
             <p className="mt-2 text-3xl font-semibold text-gray-900">
-              {endpointData.metrics.p95_response_time}ms
+              {Math.round(endpointData.metrics.p95_response_time)}ms
             </p>
           </div>
           <div className="p-4 bg-gray-50 rounded-lg">
@@ -103,32 +197,132 @@ export const EndpointDetail: React.FC<EndpointDetailProps> = ({
             </p>
           </div>
         </div>
-      </div>
 
-      {/* Response Time Chart */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Response Time Trend</h3>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={endpointData.timeSeriesData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="timestamp"
-                tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()}
-              />
-              <YAxis />
-              <Tooltip
-                labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
-                formatter={(value: number) => `${value}ms`}
-              />
-              <Line
-                type="monotone"
-                dataKey="response_time"
-                stroke="#4F46E5"
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+        {/* Dynamic Thresholds */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Response Time Thresholds</h3>
+            <div className="space-y-1">
+              <p className="text-sm text-gray-700">P95: {Math.round(thresholds.responseTime.p95)}ms</p>
+              <p className="text-sm text-gray-700">P99: {Math.round(thresholds.responseTime.p99)}ms</p>
+              <p className="text-sm text-yellow-600">Warning: {Math.round(thresholds.responseTime.warning)}ms</p>
+              <p className="text-sm text-red-600">Critical: {Math.round(thresholds.responseTime.critical)}ms</p>
+            </div>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Error Rate Thresholds</h3>
+            <div className="space-y-1">
+              <p className="text-sm text-yellow-600">Warning: {thresholds.errorRate.warning}%</p>
+              <p className="text-sm text-red-600">Critical: {thresholds.errorRate.critical}%</p>
+            </div>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Traffic Volume Thresholds</h3>
+            <div className="space-y-1">
+              <p className="text-sm text-gray-700">Low: {Math.round(thresholds.trafficVolume.low)} req/min</p>
+              <p className="text-sm text-gray-700">High: {Math.round(thresholds.trafficVolume.high)} req/min</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Response Time Trend */}
+        <div className="space-y-6">
+          <div className="h-[300px] bg-white p-4 rounded-lg shadow">
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Response Time Trend</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={timeSeriesData} margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis 
+                  dataKey="time" 
+                  tick={{ fill: '#666' }}
+                  tickLine={{ stroke: '#666' }}
+                />
+                <YAxis 
+                  tick={{ fill: '#666' }}
+                  tickLine={{ stroke: '#666' }}
+                  label={{ value: 'Response Time (ms)', angle: -90, position: 'insideLeft', fill: '#666' }}
+                />
+                <Tooltip contentStyle={{ background: 'white', border: '1px solid #ddd' }} />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="avgResponseTime" 
+                  stroke="#3B82F6" 
+                  name="Response Time (ms)"
+                  strokeWidth={2}
+                  dot={{ fill: '#3B82F6', r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Error Rates */}
+          <div className="h-[300px] bg-white p-4 rounded-lg shadow">
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Error Rates</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={timeSeriesData} margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis 
+                  dataKey="time" 
+                  tick={{ fill: '#666' }}
+                  tickLine={{ stroke: '#666' }}
+                />
+                <YAxis 
+                  tick={{ fill: '#666' }}
+                  tickLine={{ stroke: '#666' }}
+                  label={{ value: 'Error Rate (%)', angle: -90, position: 'insideLeft', fill: '#666' }}
+                />
+                <Tooltip contentStyle={{ background: 'white', border: '1px solid #ddd' }} />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="error4xxRate" 
+                  stroke="#FBBF24" 
+                  name="4xx Error Rate (%)"
+                  strokeWidth={2}
+                  dot={{ fill: '#FBBF24', r: 4 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="error5xxRate" 
+                  stroke="#EF4444" 
+                  name="5xx Error Rate (%)"
+                  strokeWidth={2}
+                  dot={{ fill: '#EF4444', r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Traffic Volume */}
+          <div className="h-[300px] bg-white p-4 rounded-lg shadow">
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Traffic Volume</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={timeSeriesData} margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis 
+                  dataKey="time" 
+                  tick={{ fill: '#666' }}
+                  tickLine={{ stroke: '#666' }}
+                />
+                <YAxis 
+                  tick={{ fill: '#666' }}
+                  tickLine={{ stroke: '#666' }}
+                  label={{ value: 'Requests per Minute', angle: -90, position: 'insideLeft', fill: '#666' }}
+                />
+                <Tooltip contentStyle={{ background: 'white', border: '1px solid #ddd' }} />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="requestCount" 
+                  stroke="#10B981" 
+                  name="Requests per Minute"
+                  strokeWidth={2}
+                  dot={{ fill: '#10B981', r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
@@ -148,10 +342,34 @@ export const EndpointDetail: React.FC<EndpointDetailProps> = ({
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status Code
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Response Time
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   User ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Trace ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Span ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Resource
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Environment
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Cloud Provider
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Region
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Host
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Error Message
@@ -174,12 +392,42 @@ export const EndpointDetail: React.FC<EndpointDetailProps> = ({
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {log.status_code}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {log.response_time_ms}ms
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {log.user_id}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-red-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">
+                    {log.trace_id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">
+                    {log.span_id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {log.resource}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      log.environment === 'production' ? 'bg-purple-100 text-purple-800' :
+                      log.environment === 'staging' ? 'bg-blue-100 text-blue-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {log.environment}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {log.cloud_provider}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {log.region}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {log.host}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {log.error_message || '-'}
                   </td>
                 </tr>

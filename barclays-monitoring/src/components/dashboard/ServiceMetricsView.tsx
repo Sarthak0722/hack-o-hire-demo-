@@ -83,12 +83,19 @@ export const ServiceMetricsView: React.FC<ServiceMetricsViewProps> = ({
     const overallResponseTime = endpoints.reduce((sum, ep) => 
       sum + (ep.total_requests * parseFloat(ep.avg_response_time)), 0) / totalRequests;
 
+    // Calculate overall P95 and P99
+    const allResponseTimes = endpoints.flatMap(ep => ep.response_times).sort((a, b) => a - b);
+    const p95Index = Math.floor(allResponseTimes.length * 0.95);
+    const p99Index = Math.floor(allResponseTimes.length * 0.99);
+
     return {
       endpoints,
       overall: {
         total_requests: totalRequests,
         success_rate: overallSuccess.toFixed(2),
-        avg_response_time: overallResponseTime.toFixed(2)
+        avg_response_time: overallResponseTime.toFixed(2),
+        p95_response_time: allResponseTimes[p95Index] || 0,
+        p99_response_time: allResponseTimes[p99Index] || 0
       }
     };
   }, [logs, serviceCategory]);
@@ -110,7 +117,7 @@ export const ServiceMetricsView: React.FC<ServiceMetricsViewProps> = ({
           <h2 className="text-2xl font-semibold text-gray-800">{serviceCategory}</h2>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-3 gap-6 mb-8">
           <div className="p-4 bg-gray-50 rounded-lg">
             <h3 className="text-sm font-medium text-gray-500">Total Requests</h3>
             <p className="mt-2 text-3xl font-semibold text-gray-900">
@@ -130,41 +137,175 @@ export const ServiceMetricsView: React.FC<ServiceMetricsViewProps> = ({
             </p>
           </div>
         </div>
-      </div>
 
-      {/* Performance Charts */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Response Time Distribution</h3>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={serviceData.endpoints[0]?.timestamps.map((timestamp, i) => ({
-              timestamp,
-              ...serviceData.endpoints.reduce((acc, endpoint) => ({
-                ...acc,
-                [endpoint.endpoint]: endpoint.response_times[i]
-              }), {})
-            }))}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="timestamp"
-                tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()}
-              />
-              <YAxis />
-              <Tooltip
-                labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
-              />
-              <Legend />
-              {serviceData.endpoints.map((endpoint, i) => (
-                <Line
-                  key={endpoint.endpoint}
-                  type="monotone"
-                  dataKey={endpoint.endpoint}
-                  stroke={`hsl(${(i * 137) % 360}, 70%, 50%)`}
-                  dot={false}
+        {/* Dynamic Thresholds */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Response Time Thresholds</h3>
+            <div className="space-y-1">
+              <p className="text-sm text-gray-700">P95: {Math.round(serviceData.overall.p95_response_time)}ms</p>
+              <p className="text-sm text-gray-700">P99: {Math.round(serviceData.overall.p99_response_time)}ms</p>
+              <p className="text-sm text-yellow-600">Warning: {Math.round(serviceData.overall.p95_response_time * 1.2)}ms</p>
+              <p className="text-sm text-red-600">Critical: {Math.round(serviceData.overall.p99_response_time * 1.2)}ms</p>
+            </div>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Error Rate Thresholds</h3>
+            <div className="space-y-1">
+              <p className="text-sm text-yellow-600">Warning: 5%</p>
+              <p className="text-sm text-red-600">Critical: 10%</p>
+            </div>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Traffic Volume Thresholds</h3>
+            <div className="space-y-1">
+              <p className="text-sm text-gray-700">Low: {Math.round(serviceData.overall.total_requests * 0.5)} req/min</p>
+              <p className="text-sm text-gray-700">High: {Math.round(serviceData.overall.total_requests * 1.5)} req/min</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Response Time Distribution */}
+        <div className="space-y-6">
+          <div className="h-[300px] bg-white p-4 rounded-lg shadow">
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Response Time Distribution</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis 
+                  dataKey="timestamp"
+                  tick={false}
+                  tickLine={false}
                 />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
+                <YAxis 
+                  tick={{ fill: '#666', fontSize: 12 }}
+                  tickLine={{ stroke: '#666' }}
+                  label={{ 
+                    value: 'Response Time (ms)', 
+                    angle: -90, 
+                    position: 'insideLeft', 
+                    fill: '#666',
+                    style: { textAnchor: 'middle' },
+                    offset: -45
+                  }}
+                />
+                <Tooltip 
+                  contentStyle={{ background: 'white', border: '1px solid #ddd' }}
+                  labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
+                />
+                <Legend />
+                {serviceData.endpoints.map((endpoint, i) => (
+                  <Line
+                    key={endpoint.endpoint}
+                    type="monotone"
+                    dataKey="response_time"
+                    data={endpoint.timestamps.map((t, idx) => ({
+                      timestamp: new Date(t).getTime(),
+                      response_time: endpoint.response_times[idx]
+                    }))}
+                    name={endpoint.endpoint}
+                    stroke={`hsl(${(i * 137) % 360}, 70%, 50%)`}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Error Rates */}
+          <div className="h-[300px] bg-white p-4 rounded-lg shadow">
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Error Rates</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis 
+                  dataKey="timestamp"
+                  tick={false}
+                  tickLine={false}
+                />
+                <YAxis 
+                  tick={{ fill: '#666', fontSize: 12 }}
+                  tickLine={{ stroke: '#666' }}
+                  label={{ 
+                    value: 'Error Rate (%)', 
+                    angle: -90, 
+                    position: 'insideLeft', 
+                    fill: '#666',
+                    style: { textAnchor: 'middle' },
+                    offset: -45
+                  }}
+                />
+                <Tooltip 
+                  contentStyle={{ background: 'white', border: '1px solid #ddd' }}
+                  labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
+                />
+                <Legend />
+                {serviceData.endpoints.map((endpoint, i) => (
+                  <Line
+                    key={endpoint.endpoint}
+                    type="monotone"
+                    dataKey="error_rate"
+                    data={endpoint.timestamps.map((t) => ({
+                      timestamp: new Date(t).getTime(),
+                      error_rate: 100 - parseFloat(endpoint.success_rate)
+                    }))}
+                    name={endpoint.endpoint}
+                    stroke={`hsl(${(i * 137) % 360}, 70%, 50%)`}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Traffic Volume */}
+          <div className="h-[300px] bg-white p-4 rounded-lg shadow">
+            <h3 className="text-lg font-medium text-gray-800 mb-4">Traffic Volume</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis 
+                  dataKey="timestamp"
+                  tick={false}
+                  tickLine={false}
+                />
+                <YAxis 
+                  tick={{ fill: '#666', fontSize: 12 }}
+                  tickLine={{ stroke: '#666' }}
+                  label={{ 
+                    value: 'Requests per Minute', 
+                    angle: -90, 
+                    position: 'insideLeft', 
+                    fill: '#666',
+                    style: { textAnchor: 'middle' },
+                    offset: -45
+                  }}
+                />
+                <Tooltip 
+                  contentStyle={{ background: 'white', border: '1px solid #ddd' }}
+                  labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
+                />
+                <Legend />
+                {serviceData.endpoints.map((endpoint, i) => (
+                  <Line
+                    key={endpoint.endpoint}
+                    type="monotone"
+                    dataKey="requests"
+                    data={endpoint.timestamps.map((t) => ({
+                      timestamp: new Date(t).getTime(),
+                      requests: endpoint.total_requests
+                    }))}
+                    name={endpoint.endpoint}
+                    stroke={`hsl(${(i * 137) % 360}, 70%, 50%)`}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 

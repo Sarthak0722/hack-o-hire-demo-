@@ -21,6 +21,8 @@ export interface APILog {
     client_type: 'web' | 'mobile' | 'api';
     client_version: string;
   };
+  cloud_provider: string;
+  host: string;
 }
 
 export interface APIMetrics {

@@ -24,6 +24,8 @@ const API_SERVICES = {
   }
 };
 
+const CLOUD_PROVIDERS = ['AWS', 'Azure', 'GCP'] as const;
+
 const REGIONS = {
   'Europe': ['uk-london-1', 'eu-frankfurt-1', 'eu-dublin-1'],
   'Americas': ['us-east-1', 'us-west-1', 'ca-central-1'],
@@ -60,6 +62,8 @@ export const generateMockAPILog = (): APILog => {
   const region_category = hour >= 16 ? 'Americas' : 
                          hour >= 8 ? 'Europe' : 'Asia-Pacific';
   const region = REGIONS[region_category][Math.floor(Math.random() * REGIONS[region_category].length)];
+  const cloud_provider = CLOUD_PROVIDERS[Math.floor(Math.random() * CLOUD_PROVIDERS.length)];
+  const host = `${region}-server-${Math.floor(Math.random() * 10)}`;
 
   return {
     id: uuidv4(),
@@ -85,7 +89,9 @@ export const generateMockAPILog = (): APILog => {
       datacenter: region.split('-')[0],
       client_type: CLIENT_TYPES[Math.floor(Math.random() * CLIENT_TYPES.length)],
       client_version: CLIENT_VERSIONS[Math.floor(Math.random() * CLIENT_VERSIONS.length)]
-    }
+    },
+    cloud_provider,
+    host
   };
 };
 
