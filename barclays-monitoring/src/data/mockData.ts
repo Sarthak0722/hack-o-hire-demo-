@@ -215,4 +215,86 @@ export const generateMockAlert = (anomaly: Anomaly): Alert => {
     region: anomaly.region,
     environment: anomaly.environment
   };
+};
+
+export const generateMockServerHealth = () => {
+  const servers = [
+    {
+      id: 'us-east-1',
+      location: [-77.0364, 38.8951] as [number, number], // Washington DC
+      name: 'US East (N. Virginia)',
+      region: 'us-east-1',
+      provider: 'AWS',
+      health: 95 + Math.random() * 5,
+      responseTime: 50 + Math.random() * 100,
+      successRate: 98 + Math.random() * 2
+    },
+    {
+      id: 'eu-west-1',
+      location: [-0.1276, 51.5074] as [number, number], // London
+      name: 'EU West (London)',
+      region: 'eu-west-1',
+      provider: 'AWS',
+      health: 85 + Math.random() * 10,
+      responseTime: 80 + Math.random() * 120,
+      successRate: 97 + Math.random() * 3
+    },
+    {
+      id: 'ap-southeast-1',
+      location: [103.8198, 1.3521] as [number, number], // Singapore
+      name: 'Asia Pacific (Singapore)',
+      region: 'ap-southeast-1',
+      provider: 'AWS',
+      health: 75 + Math.random() * 20,
+      responseTime: 100 + Math.random() * 150,
+      successRate: 95 + Math.random() * 5
+    },
+    {
+      id: 'azure-eastus',
+      location: [-78.6382, 35.7796] as [number, number], // Virginia
+      name: 'East US',
+      region: 'eastus',
+      provider: 'Azure',
+      health: 90 + Math.random() * 10,
+      responseTime: 60 + Math.random() * 90,
+      successRate: 97 + Math.random() * 3
+    },
+    {
+      id: 'azure-westeurope',
+      location: [4.8952, 52.3702] as [number, number], // Amsterdam
+      name: 'West Europe',
+      region: 'westeurope',
+      provider: 'Azure',
+      health: 88 + Math.random() * 12,
+      responseTime: 70 + Math.random() * 100,
+      successRate: 96 + Math.random() * 4
+    },
+    {
+      id: 'gcp-us-central1',
+      location: [-93.2650, 44.9778] as [number, number], // Iowa
+      name: 'US Central',
+      region: 'us-central1',
+      provider: 'GCP',
+      health: 92 + Math.random() * 8,
+      responseTime: 55 + Math.random() * 80,
+      successRate: 98 + Math.random() * 2
+    },
+    {
+      id: 'gcp-europe-west1',
+      location: [2.3522, 48.8566] as [number, number], // Paris
+      name: 'Europe West',
+      region: 'europe-west1',
+      provider: 'GCP',
+      health: 87 + Math.random() * 13,
+      responseTime: 75 + Math.random() * 110,
+      successRate: 96 + Math.random() * 4
+    }
+  ];
+
+  return servers.map(server => ({
+    ...server,
+    health: Math.round(server.health * 10) / 10,
+    responseTime: Math.round(server.responseTime),
+    successRate: Math.round(server.successRate * 10) / 10
+  }));
 }; 

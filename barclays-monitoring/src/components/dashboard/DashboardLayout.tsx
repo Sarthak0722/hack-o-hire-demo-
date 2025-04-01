@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { APILog, APIMetrics, Anomaly, Alert } from '../../types/api';
-import { generateMockAPILog, generateMockMetrics, generateMockAnomaly, generateMockAlert } from '../../data/mockData';
+import { generateMockAPILog, generateMockMetrics, generateMockAnomaly, generateMockAlert, generateMockServerHealth } from '../../data/mockData';
 import { ServiceMetricsView } from './ServiceMetricsView';
 import { ServiceOverview } from './ServiceOverview';
 import { EndpointDetail } from './EndpointDetail';
 import AIAssistant from '../chatbot/AIAssistant';
 import { CriticalAlertsPanel } from '../alerts/CriticalAlertsPanel';
+import { WorldMapView } from './WorldMapView';
 
 interface Service {
   name: string;
@@ -66,6 +67,8 @@ export const DashboardLayout: React.FC = () => {
   ]);
   const [showCriticalAlerts, setShowCriticalAlerts] = useState(false);
   const [aiAssistantRef, setAiAssistantRef] = useState<any>(null);
+  const [showWorldMap, setShowWorldMap] = useState(false);
+  const [serverHealth, setServerHealth] = useState(generateMockServerHealth());
 
   useEffect(() => {
     const generateInitialData = () => {
@@ -101,7 +104,15 @@ export const DashboardLayout: React.FC = () => {
       }
     }, 2000);
 
-    return () => clearInterval(interval);
+    // Update server health every 10 seconds
+    const healthInterval = setInterval(() => {
+      setServerHealth(generateMockServerHealth());
+    }, 10000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(healthInterval);
+    };
   }, [selectedEnvironment]);
 
   const getServiceRiskScore = (serviceCategory: string) => {
@@ -243,24 +254,33 @@ export const DashboardLayout: React.FC = () => {
               )}
             </div>
             <div className="flex items-center space-x-4">
+              <button
+                onClick={() => setShowWorldMap(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center space-x-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Global Health</span>
+              </button>
               <select
                 value={selectedEnvironment}
                 onChange={(e) => setSelectedEnvironment(e.target.value)}
-                className="px-3 py-1 bg-white border border-gray-300 rounded-md text-gray-700"
+                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="production">Production</option>
                 <option value="staging">Staging</option>
-                <option value="dr">DR</option>
+                <option value="development">Development</option>
               </select>
               <select
                 value={selectedTimeRange}
                 onChange={(e) => setSelectedTimeRange(e.target.value)}
-                className="px-3 py-1 bg-white border border-gray-300 rounded-md text-gray-700"
+                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="1h">Last hour</option>
-                <option value="6h">Last 6 hours</option>
                 <option value="24h">Last 24 hours</option>
                 <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
               </select>
             </div>
           </div>
@@ -287,6 +307,14 @@ export const DashboardLayout: React.FC = () => {
           onAlertClick={handleAlertClick}
           onClose={() => setShowCriticalAlerts(false)}
           onViewAPI={handleViewAPI}
+        />
+      )}
+
+      {/* World Map Modal */}
+      {showWorldMap && (
+        <WorldMapView
+          serverHealth={serverHealth}
+          onClose={() => setShowWorldMap(false)}
         />
       )}
     </div>
