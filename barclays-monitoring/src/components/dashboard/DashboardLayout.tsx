@@ -6,6 +6,16 @@ import { ServiceOverview } from './ServiceOverview';
 import { EndpointDetail } from './EndpointDetail';
 import AIAssistant from '../chatbot/AIAssistant';
 
+interface Service {
+  name: string;
+  category: string;
+  successRate: number;
+  responseTime: number;
+  activeUsers: number;
+  riskScore: number;
+  anomalies: number;
+}
+
 export const DashboardLayout: React.FC = () => {
   const [logs, setLogs] = useState<APILog[]>([]);
   const [metrics, setMetrics] = useState<APIMetrics | null>(null);
@@ -15,9 +25,10 @@ export const DashboardLayout: React.FC = () => {
   const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>('1h');
   const [selectedEnvironment, setSelectedEnvironment] = useState<string>('production');
-  const [services, setServices] = useState([
+  const [services] = useState<Service[]>([
     {
       name: 'Authentication Services',
+      category: 'Authentication Services',
       successRate: 95.9,
       responseTime: 149,
       activeUsers: 73,
@@ -26,6 +37,7 @@ export const DashboardLayout: React.FC = () => {
     },
     {
       name: 'Account Services',
+      category: 'Account Services',
       successRate: 97.5,
       responseTime: 149,
       activeUsers: 81,
@@ -34,6 +46,7 @@ export const DashboardLayout: React.FC = () => {
     },
     {
       name: 'Payment Services',
+      category: 'Payment Services',
       successRate: 98.8,
       responseTime: 446,
       activeUsers: 86,
@@ -42,6 +55,7 @@ export const DashboardLayout: React.FC = () => {
     },
     {
       name: 'Risk & Compliance',
+      category: 'Risk & Compliance',
       successRate: 98.9,
       responseTime: 491,
       activeUsers: 89,
@@ -87,20 +101,6 @@ export const DashboardLayout: React.FC = () => {
     return () => clearInterval(interval);
   }, [selectedEnvironment]);
 
-  useEffect(() => {
-    // Keep the services data persistent
-    const interval = setInterval(() => {
-      setServices(prevServices => prevServices.map(service => ({
-        ...service,
-        successRate: Math.max(service.successRate + (Math.random() - 0.5) * 0.2, 0),
-        responseTime: Math.max(service.responseTime + (Math.random() - 0.5) * 10, 0),
-        activeUsers: Math.max(Math.round(service.activeUsers + (Math.random() - 0.5) * 2), 1)
-      })));
-    }, 60000); // Update every minute
-
-    return () => clearInterval(interval);
-  }, []);
-
   const getServiceRiskScore = (serviceCategory: string) => {
     if (!metrics?.metrics_by_category[serviceCategory]) return 0;
     return metrics.metrics_by_category[serviceCategory].risk_score;
@@ -134,16 +134,26 @@ export const DashboardLayout: React.FC = () => {
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sortedServices.map(serviceCategory => (
-          <ServiceOverview
-            key={serviceCategory}
-            serviceCategory={serviceCategory}
-            metrics={metrics!.metrics_by_category[serviceCategory]}
-            alerts={alerts.filter(a => a.affected_services.includes(serviceCategory))}
-            anomalies={anomalies.filter(a => a.service_category === serviceCategory)}
-            onClick={() => setSelectedService(serviceCategory)}
-          />
-        ))}
+        {services.map(service => {
+          const serviceMetrics = metrics?.metrics_by_category[service.category] || {
+            total_requests: 0,
+            success_rate: service.successRate,
+            avg_response_time: service.responseTime,
+            active_users: service.activeUsers,
+            risk_score: service.riskScore
+          };
+          
+          return (
+            <ServiceOverview
+              key={service.category}
+              serviceCategory={service.category}
+              metrics={serviceMetrics}
+              alerts={alerts.filter(a => a.affected_services.includes(service.category))}
+              anomalies={anomalies.filter(a => a.service_category === service.category)}
+              onClick={() => setSelectedService(service.category)}
+            />
+          );
+        })}
       </div>
     );
   };
