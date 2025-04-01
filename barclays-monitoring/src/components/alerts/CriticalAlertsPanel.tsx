@@ -139,8 +139,8 @@ export const CriticalAlertsPanel: React.FC<CriticalAlertsPanelProps> = ({
                             <div className="mt-3 pl-4 border-l-2 border-blue-200">
                               <p className="text-sm font-medium text-blue-600 mb-1">Prediction based on:</p>
                               <ul className="list-disc list-inside text-sm text-gray-600">
-                                {getPredictionParameters(alert)?.map(param => (
-                                  <li key={param}>{param}</li>
+                                {alert.metadata?.prediction_factors?.map(factor => (
+                                  <li key={factor}>{factor}</li>
                                 ))}
                               </ul>
                             </div>

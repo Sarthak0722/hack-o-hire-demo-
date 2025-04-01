@@ -86,6 +86,7 @@ export interface Alert {
     incident_id?: string;
     resolution_time?: number;
     assigned_team?: string;
+    prediction_factors?: string[];
   };
 }
 

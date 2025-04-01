@@ -201,17 +201,82 @@ export const generateMockAnomaly = (log: APILog): Anomaly => {
   };
 };
 
+const getCause = (anomaly: Anomaly): string => {
+  switch (anomaly.type) {
+    case 'performance':
+      return 'Response time has exceeded the configured threshold, indicating potential performance bottlenecks.';
+    case 'error_rate':
+      return 'Error rate has increased beyond normal levels.';
+    case 'security':
+      return 'Unusual access patterns or security violations have been detected.';
+    default:
+      return 'Multiple metrics have deviated from their normal ranges.';
+  }
+};
+
 export const generateMockAlert = (anomaly: Anomaly): Alert => {
+  const predictiveTypes = [
+    {
+      title: 'Predicted API Performance Degradation: OrderAPI',
+      description: 'OrderAPI response time predicted to exceed 3000ms in the next 10 minutes',
+      cause: 'ML model detected: 1) Response time trend increased by 65% in last 5 minutes 2) Database connection pool near capacity 3) Increased request queue depth',
+      severity: 'high' as const,
+      tags: ['predictive', 'performance', 'ml-alert', 'order-api'],
+      predictionFactors: [
+        'Response time trend increased by 65% in last 5 minutes',
+        'Database connection pool at 90% capacity',
+        'Request queue depth increased by 150%',
+        'Traffic pattern analysis shows continued growth'
+      ]
+    },
+    {
+      title: 'Imminent System Downtime: Payment Gateway',
+      description: 'High memory and CPU usage detected on Payment Gateway server; system crash predicted within 1 hour',
+      cause: 'ML model detected: 1) Memory usage at 92% and growing 2) CPU sustained at 95% for last 15 minutes 3) Disk I/O latency increased by 200%',
+      severity: 'critical' as const,
+      tags: ['predictive', 'system-health', 'ml-alert', 'payment-gateway'],
+      predictionFactors: [
+        'Memory usage at 92% and growing',
+        'CPU sustained at 95% for last 15 minutes',
+        'Disk I/O latency increased by 200%',
+        'Historical pattern matching: 87% similarity with previous incidents'
+      ]
+    }
+  ];
+
+  if (Math.random() < 0.4) {
+    const predictiveAlert = predictiveTypes[Math.floor(Math.random() * predictiveTypes.length)];
+    return {
+      id: `alert-${Date.now()}-${Math.random()}`,
+      anomaly_id: anomaly.id,
+      timestamp: new Date().toISOString(),
+      title: predictiveAlert.title,
+      description: predictiveAlert.description,
+      severity: predictiveAlert.severity,
+      status: 'new',
+      affected_services: anomaly.service_category ? [anomaly.service_category] : [],
+      tags: predictiveAlert.tags,
+      region: anomaly.region,
+      environment: anomaly.environment,
+      metadata: {
+        incident_id: `PRED-${Date.now()}`,
+        assigned_team: 'ML Ops',
+        resolution_time: 1800,
+        prediction_factors: predictiveAlert.predictionFactors
+      }
+    };
+  }
+
   return {
-    id: uuidv4(),
+    id: `alert-${Date.now()}-${Math.random()}`,
     anomaly_id: anomaly.id,
     timestamp: new Date().toISOString(),
-    title: `${anomaly.severity.toUpperCase()} Alert: ${anomaly.type} in ${anomaly.service_name}`,
-    description: anomaly.description,
+    title: `${anomaly.severity.toUpperCase()} Alert: ${anomaly.type} in ${anomaly.service_category}`,
+    description: `Detected unusual ${anomaly.type} pattern in ${anomaly.service_category}`,
     severity: anomaly.severity,
     status: 'new',
-    affected_services: [anomaly.service_name],
-    tags: [anomaly.type, anomaly.severity, anomaly.service_name],
+    affected_services: [anomaly.service_category],
+    tags: [anomaly.type, anomaly.severity, anomaly.service_category],
     region: anomaly.region,
     environment: anomaly.environment
   };
