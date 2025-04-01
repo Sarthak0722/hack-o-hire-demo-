@@ -51,18 +51,11 @@ export const ServiceOverview: React.FC<ServiceOverviewProps> = ({
       <div className="p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-medium text-gray-900">{serviceCategory}</h3>
-          {(criticalAlerts > 0 || recentAnomalies > 0) && (
+          {criticalAlerts > 0 && (
             <div className="flex space-x-2">
-              {criticalAlerts > 0 && (
-                <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
-                  {criticalAlerts} Critical
-                </span>
-              )}
-              {recentAnomalies > 0 && (
-                <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
-                  {recentAnomalies} Anomalies
-                </span>
-              )}
+              <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
+                {criticalAlerts} Critical
+              </span>
             </div>
           )}
         </div>

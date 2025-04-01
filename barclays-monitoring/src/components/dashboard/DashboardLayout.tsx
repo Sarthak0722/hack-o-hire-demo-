@@ -5,6 +5,7 @@ import { ServiceMetricsView } from './ServiceMetricsView';
 import { ServiceOverview } from './ServiceOverview';
 import { EndpointDetail } from './EndpointDetail';
 import AIAssistant from '../chatbot/AIAssistant';
+import { CriticalAlertsPanel } from '../alerts/CriticalAlertsPanel';
 
 interface Service {
   name: string;
@@ -63,6 +64,8 @@ export const DashboardLayout: React.FC = () => {
       anomalies: 4
     }
   ]);
+  const [showCriticalAlerts, setShowCriticalAlerts] = useState(false);
+  const [aiAssistantRef, setAiAssistantRef] = useState<any>(null);
 
   useEffect(() => {
     const generateInitialData = () => {
@@ -109,6 +112,21 @@ export const DashboardLayout: React.FC = () => {
   const sortedServices = Object.keys(metrics?.metrics_by_category || {})
     .sort((a, b) => getServiceRiskScore(b) - getServiceRiskScore(a));
 
+  const handleAlertClick = (alert: Alert) => {
+    if (aiAssistantRef?.current?.handleAlertAnalysis) {
+      aiAssistantRef.current.handleAlertAnalysis(alert);
+    }
+    setShowCriticalAlerts(false);
+  };
+
+  const handleViewAPI = (service: string, endpoint: string) => {
+    setSelectedService(service);
+    if (endpoint) {
+      setSelectedEndpoint(endpoint);
+    }
+    setShowCriticalAlerts(false);
+  };
+
   const renderContent = () => {
     if (selectedEndpoint && selectedService) {
       return (
@@ -133,28 +151,55 @@ export const DashboardLayout: React.FC = () => {
     }
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {services.map(service => {
-          const serviceMetrics = metrics?.metrics_by_category[service.category] || {
-            total_requests: 0,
-            success_rate: service.successRate,
-            avg_response_time: service.responseTime,
-            active_users: service.activeUsers,
-            risk_score: service.riskScore
-          };
-          
-          return (
-            <ServiceOverview
-              key={service.category}
-              serviceCategory={service.category}
-              metrics={serviceMetrics}
-              alerts={alerts.filter(a => a.affected_services.includes(service.category))}
-              anomalies={anomalies.filter(a => a.service_category === service.category)}
-              onClick={() => setSelectedService(service.category)}
-            />
-          );
-        })}
-      </div>
+      <>
+        {/* Critical Alerts Banner */}
+        {alerts.some(a => a.severity === 'critical' && a.status === 'new') && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                  <h3 className="text-lg font-medium text-red-800">Critical Alerts Detected</h3>
+                  <p className="text-sm text-red-600">
+                    {alerts.filter(a => a.severity === 'critical' && a.status === 'new').length} critical issues require immediate attention
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCriticalAlerts(true)}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors duration-200"
+              >
+                View Alerts
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {services.map(service => {
+            const serviceMetrics = metrics?.metrics_by_category[service.category] || {
+              total_requests: 0,
+              success_rate: service.successRate,
+              avg_response_time: service.responseTime,
+              active_users: service.activeUsers,
+              risk_score: service.riskScore
+            };
+            
+            return (
+              <ServiceOverview
+                key={service.category}
+                serviceCategory={service.category}
+                metrics={serviceMetrics}
+                alerts={alerts.filter(a => a.affected_services.includes(service.category))}
+                anomalies={anomalies.filter(a => a.service_category === service.category)}
+                onClick={() => setSelectedService(service.category)}
+              />
+            );
+          })}
+        </div>
+      </>
     );
   };
 
@@ -183,82 +228,67 @@ export const DashboardLayout: React.FC = () => {
                   >
                     Dashboard
                   </button>
-                  <span className="text-gray-400">/</span>
                   {selectedService && (
                     <>
+                      <span className="text-gray-400">/</span>
                       <button
                         onClick={() => setSelectedEndpoint(null)}
                         className="px-3 py-1 bg-white border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium transition-colors duration-200"
                       >
                         {selectedService}
                       </button>
-                      {selectedEndpoint && (
-                        <>
-                          <span className="text-gray-400">/</span>
-                          <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-md">
-                            {selectedEndpoint}
-                          </span>
-                        </>
-                      )}
                     </>
                   )}
                 </div>
               )}
             </div>
-
             <div className="flex items-center space-x-4">
               <select
                 value={selectedEnvironment}
                 onChange={(e) => setSelectedEnvironment(e.target.value)}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-1 bg-white border border-gray-300 rounded-md text-gray-700"
               >
                 <option value="production">Production</option>
                 <option value="staging">Staging</option>
-                <option value="development">Development</option>
+                <option value="dr">DR</option>
               </select>
               <select
                 value={selectedTimeRange}
                 onChange={(e) => setSelectedTimeRange(e.target.value)}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-1 bg-white border border-gray-300 rounded-md text-gray-700"
               >
                 <option value="1h">Last hour</option>
+                <option value="6h">Last 6 hours</option>
                 <option value="24h">Last 24 hours</option>
                 <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
               </select>
             </div>
           </div>
         </div>
       </header>
 
-      <main>
-        <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-          {/* Critical Alerts Banner */}
-          {alerts.some(alert => alert.severity === 'critical' && alert.status === 'new') && (
-            <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">Critical Alerts Detected</h3>
-                  <div className="mt-2 text-sm text-red-700">
-                    {alerts.filter(alert => alert.severity === 'critical' && alert.status === 'new').length} critical issues require immediate attention
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Main Content */}
-          {renderContent()}
-        </div>
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+        {renderContent()}
       </main>
 
       {/* AI Assistant */}
-      <AIAssistant anomalies={anomalies} alerts={alerts} />
+      <AIAssistant
+        ref={aiAssistantRef}
+        anomalies={anomalies}
+        alerts={alerts}
+      />
+
+      {/* Critical Alerts Panel */}
+      {showCriticalAlerts && (
+        <CriticalAlertsPanel
+          alerts={alerts}
+          anomalies={anomalies}
+          onAlertClick={handleAlertClick}
+          onClose={() => setShowCriticalAlerts(false)}
+          onViewAPI={handleViewAPI}
+        />
+      )}
     </div>
   );
 }; 
